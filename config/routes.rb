@@ -15,4 +15,9 @@ Rails.application.routes.draw do
   # root "posts#index"
   resources :products
   root "products#index"
+
+  # Kafka integration routes
+  get "kafka", to: "kafka#index", as: :kafka_index
+  post "kafka/send", to: "kafka#send_message", as: :kafka_send_message
+  post "kafka/clear", to: "kafka#clear_messages", as: :kafka_clear_messages
 end

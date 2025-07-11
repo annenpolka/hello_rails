@@ -58,6 +58,19 @@ HelloRailsアプリケーション - Rails 8.0.2を使用したRailsガイド学
 4. Hotwireの活用
 5. Rails 8の新機能探索
 
+## Kafka/Karafka 統合
+- **Karafka Gem**: Apache Kafka メッセージング統合
+- **設定ファイル**: `karafka.rb`
+- **Consumer**: `app/consumers/` ディレクトリ
+- **Docker環境**: `docker-compose.yml` でKafka/Zookeeper管理
+- **テストガイド**: `KARAFKA_TESTING_GUIDE.md` 参照
+
+### Kafka関連コマンド
+- Kafka起動: `docker-compose up -d`
+- Consumer起動: `bundle exec karafka server`
+- 統合テスト: `ruby final_test.rb`
+- Consumer テスト: `ruby consumer_test.rb`
+
 ## 注意事項
 - 日本語をデフォルト言語として使用
 - 実装とドキュメントの同時更新
