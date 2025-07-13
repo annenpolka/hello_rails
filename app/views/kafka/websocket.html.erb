@@ -1,0 +1,342 @@
+<div class="container">
+  <h1>🔌 Kafka WebSocket リアルタイム通信</h1>
+  
+  <div class="connection-status">
+    <h3>接続状況</h3>
+    <div id="connection-status" class="status disconnected">
+      🔴 未接続
+    </div>
+  </div>
+
+  <div class="message-sender">
+    <h3>メッセージ送信</h3>
+    <div class="input-group">
+      <select id="message-type">
+        <option value="user_message">ユーザーメッセージ</option>
+        <option value="system_notification">システム通知</option>
+        <option value="order_update">注文更新</option>
+        <option value="user_signup">ユーザー登録</option>
+      </select>
+      <input type="text" id="message-input" placeholder="メッセージを入力..." />
+      <button id="send-button" disabled>送信</button>
+    </div>
+  </div>
+
+  <div class="message-display">
+    <h3>受信メッセージ</h3>
+    <div class="controls">
+      <button id="clear-messages">クリア</button>
+      <label>
+        <input type="checkbox" id="auto-scroll" checked> 自動スクロール
+      </label>
+    </div>
+    <div id="messages-container"></div>
+  </div>
+</div>
+
+<style>
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+}
+
+.connection-status, .message-sender, .message-display {
+  margin-bottom: 30px;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f9f9f9;
+}
+
+.status {
+  padding: 10px;
+  border-radius: 4px;
+  font-weight: bold;
+}
+
+.status.connected {
+  background: #d4edda;
+  color: #155724;
+}
+
+.status.disconnected {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.input-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.input-group select, .input-group input {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.input-group input {
+  flex: 1;
+}
+
+.input-group button {
+  padding: 8px 16px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.input-group button:disabled {
+  background: #6c757d;
+  cursor: not-allowed;
+}
+
+.controls {
+  margin-bottom: 10px;
+  display: flex;
+  gap: 15px;
+  align-items: center;
+}
+
+.controls button {
+  padding: 6px 12px;
+  background: #6c757d;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+#messages-container {
+  height: 400px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  padding: 10px;
+  background: white;
+  border-radius: 4px;
+}
+
+.message {
+  margin-bottom: 15px;
+  padding: 10px;
+  border-left: 4px solid #007bff;
+  background: #f8f9fa;
+  border-radius: 4px;
+}
+
+.message.sent {
+  border-left-color: #28a745;
+  background: #d4edda;
+}
+
+.message.received {
+  border-left-color: #17a2b8;
+  background: #d1ecf1;
+}
+
+.message.error {
+  border-left-color: #dc3545;
+  background: #f8d7da;
+}
+
+.message-header {
+  font-weight: bold;
+  margin-bottom: 5px;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.message-content {
+  margin-bottom: 5px;
+}
+
+.message-meta {
+  font-size: 0.8em;
+  color: #999;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  console.log('🚀 WebSocket page loaded');
+  
+  // 要素を取得
+  const statusElement = document.getElementById('connection-status');
+  const messageInput = document.getElementById('message-input');
+  const messageType = document.getElementById('message-type');
+  const sendButton = document.getElementById('send-button');
+  const messagesContainer = document.getElementById('messages-container');
+  const clearButton = document.getElementById('clear-messages');
+  const autoScrollCheckbox = document.getElementById('auto-scroll');
+  
+  let cable = null;
+  let subscription = null;
+  let connected = false;
+  let messageCount = 0;
+  
+  // ActionCableの利用可能性をチェック
+  function checkActionCable() {
+    if (typeof window.ActionCable === 'undefined') {
+      console.error('❌ ActionCable is not available');
+      statusElement.textContent = '❌ ActionCable未読み込み';
+      statusElement.className = 'status disconnected';
+      return false;
+    }
+    console.log('✅ ActionCable is available');
+    return true;
+  }
+  
+  // 接続状況を更新
+  function updateConnectionStatus(isConnected) {
+    connected = isConnected;
+    sendButton.disabled = !connected;
+    
+    if (connected) {
+      statusElement.textContent = '🟢 接続中';
+      statusElement.className = 'status connected';
+    } else {
+      statusElement.textContent = '🔴 未接続';
+      statusElement.className = 'status disconnected';
+    }
+  }
+  
+  // WebSocket接続
+  function connect() {
+    if (!checkActionCable()) return;
+    
+    if (cable) {
+      cable.disconnect();
+    }
+    
+    console.log('🔌 Connecting to WebSocket...');
+    cable = window.ActionCable.createConsumer();
+    
+    subscription = cable.subscriptions.create('KafkaChannel', {
+      connected: function() {
+        console.log('✅ WebSocket connected to KafkaChannel');
+        updateConnectionStatus(true);
+      },
+      
+      disconnected: function() {
+        console.log('❌ WebSocket disconnected from KafkaChannel');
+        updateConnectionStatus(false);
+      },
+      
+      received: function(data) {
+        console.log('📨 Raw received data:', data);
+        console.log('📨 Data type:', typeof data);
+        console.log('📨 Data action:', data.action);
+        
+        // データがJSON文字列の場合はパース
+        if (typeof data === 'string') {
+          try {
+            data = JSON.parse(data);
+            console.log('📨 Parsed data:', data);
+          } catch (e) {
+            console.error('❌ Failed to parse JSON:', e);
+            return;
+          }
+        }
+        
+        handleReceivedMessage(data);
+      }
+    });
+  }
+  
+  // メッセージ送信
+  function sendMessage() {
+    const content = messageInput.value.trim();
+    const type = messageType.value;
+    
+    if (!content) {
+      alert('メッセージを入力してください');
+      return;
+    }
+    
+    if (!connected) {
+      alert('WebSocketが接続されていません');
+      return;
+    }
+    
+    console.log('📤 Sending message:', { content, type });
+    subscription.perform('send_message', {
+      content: content,
+      type: type
+    });
+    
+    messageInput.value = '';
+  }
+  
+  // 受信メッセージ処理
+  function handleReceivedMessage(data) {
+    switch (data.action) {
+      case 'message_sent':
+        displayMessage({
+          type: 'sent',
+          header: `📤 送信${data.status === 'success' ? '成功' : '失敗'}`,
+          content: data.status === 'success' 
+            ? JSON.stringify(data.message, null, 2)
+            : `エラー: ${data.error}`,
+          timestamp: new Date().toLocaleString()
+        });
+        break;
+        
+      case 'message_received':
+        displayMessage({
+          type: 'received',
+          header: '📨 Kafkaメッセージ受信',
+          content: JSON.stringify(data.payload, null, 2),
+          meta: `Topic: ${data.kafka_metadata.topic}, Partition: ${data.kafka_metadata.partition}, Offset: ${data.kafka_metadata.offset}`,
+          timestamp: new Date(data.kafka_metadata.timestamp).toLocaleString()
+        });
+        break;
+        
+      default:
+        console.log('Unknown action:', data.action);
+    }
+  }
+  
+  // メッセージ表示
+  function displayMessage({ type, header, content, meta, timestamp }) {
+    messageCount++;
+    
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${type}`;
+    messageDiv.innerHTML = `
+      <div class="message-header">${header} (#${messageCount})</div>
+      <div class="message-content"><pre>${content}</pre></div>
+      ${meta ? `<div class="message-meta">${meta}</div>` : ''}
+      <div class="message-meta">時刻: ${timestamp}</div>
+    `;
+    
+    messagesContainer.appendChild(messageDiv);
+    
+    if (autoScrollCheckbox.checked) {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+  }
+  
+  // メッセージクリア
+  function clearMessages() {
+    messagesContainer.innerHTML = '';
+    messageCount = 0;
+  }
+  
+  // イベントリスナー設定
+  sendButton.addEventListener('click', sendMessage);
+  messageInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') sendMessage();
+  });
+  clearButton.addEventListener('click', clearMessages);
+  
+  // 初期化
+  setTimeout(function() {
+    connect();
+  }, 1000); // 1秒待ってから接続
+});
+</script>

@@ -16,8 +16,14 @@ Rails.application.routes.draw do
   resources :products
   root "products#index"
 
+  # ActionCable routes
+  mount ActionCable.server => '/cable'
+
   # Kafka integration routes
   get "kafka", to: "kafka#index", as: :kafka_index
+  get "kafka/websocket", to: "kafka#websocket", as: :kafka_websocket
+  get "kafka/test_broadcast", to: "kafka#test_broadcast", as: :kafka_test_broadcast
+  post "kafka/broadcast_from_consumer", to: "kafka#broadcast_from_consumer"
   post "kafka/send", to: "kafka#send_message", as: :kafka_send_message
   post "kafka/clear", to: "kafka#clear_messages", as: :kafka_clear_messages
 end
