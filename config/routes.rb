@@ -22,8 +22,13 @@ Rails.application.routes.draw do
   # Kafka integration routes
   get "kafka", to: "kafka#index", as: :kafka_index
   get "kafka/websocket", to: "kafka#websocket", as: :kafka_websocket
+  get "kafka/debug", to: "kafka#debug", as: :kafka_debug
   get "kafka/test_broadcast", to: "kafka#test_broadcast", as: :kafka_test_broadcast
   post "kafka/broadcast_from_consumer", to: "kafka#broadcast_from_consumer"
   post "kafka/send", to: "kafka#send_message", as: :kafka_send_message
   post "kafka/clear", to: "kafka#clear_messages", as: :kafka_clear_messages
+  post "kafka/send_test_notification", to: "kafka#send_test_notification", as: :kafka_send_test_notification
+  post "kafka/send_friend_request", to: "kafka#send_friend_request", as: :kafka_send_friend_request
+  post "kafka/accept_friend_request", to: "kafka#accept_friend_request", as: :kafka_accept_friend_request
+  delete "kafka/delete_all_friendships", to: "kafka#delete_all_friendships", as: :kafka_delete_all_friendships
 end

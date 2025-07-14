@@ -2,8 +2,21 @@
 
 class KarafkaApp < Karafka::App
   setup do |config|
-    config.kafka = { 'bootstrap.servers': '127.0.0.1:9092' }
-    config.client_id = 'hello_rails_app'
+    # Redpanda broker configuration (Kafka API compatible)
+    config.kafka = { 
+      'bootstrap.servers': ENV.fetch('REDPANDA_BROKERS', '127.0.0.1:9092'),
+      # Optimized settings for Redpanda
+      'acks': 'all',
+      'retries': 3,
+      'retry.backoff.ms': 100,
+      'delivery.timeout.ms': 120_000,
+      'request.timeout.ms': 30_000,
+      # Redpanda specific optimizations
+      'batch.size': 16_384,
+      'linger.ms': 5,
+      'compression.type': 'snappy'
+    }
+    config.client_id = 'hello_rails_app_redpanda'
 
     # IMPORTANT: Customize this group_id with your application name.
     # The group_id should be unique per application to properly track message consumption.
@@ -16,7 +29,7 @@ class KarafkaApp < Karafka::App
     #
     # For more details on consumer groups and routing configuration, please refer to the
     # Karafka documentation: https://karafka.io/docs
-    config.group_id = 'hello_rails_app_consumer'
+    config.group_id = 'hello_rails_app_redpanda_consumer'
     # Recreate consumers with each batch. This will allow Rails code reload to work in the
     # development mode. Otherwise Karafka process would not be aware of code changes
     config.consumer_persistence = !Rails.env.development?
@@ -72,13 +85,24 @@ class KarafkaApp < Karafka::App
     # Uncomment this if you use Karafka with ActiveJob
     # You need to define the topic per each queue name you use
     # active_job_topic :default
+    
+    # 一般的なメッセージ処理（デモ・テスト用）
     topic :example do
-      # Uncomment this if you want Karafka to manage your topics configuration
-      # Managing topics configuration via routing will allow you to ensure config consistency
-      # across multiple environments
-      #
-      # config(partitions: 2, 'cleanup.policy': 'compact')
       consumer ExampleConsumer
+      config(partitions: 3, replication_factor: 1)
+    end
+    
+    # ユーザー通知（フレンド申請、承認、アクティビティ等）
+    topic :user_notifications do
+      consumer UserNotificationsConsumer
+      # パーティション分散でスケーラビリティ確保
+      config(partitions: 6, replication_factor: 1, 'cleanup.policy': 'delete')
+    end
+    
+    # フレンド関連アクティビティ
+    topic :friend_activities do
+      consumer FriendActivitiesConsumer  
+      config(partitions: 3, replication_factor: 1, 'cleanup.policy': 'delete')
     end
   end
 end

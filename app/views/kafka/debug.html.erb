@@ -1,0 +1,411 @@
+<div class="debug-container">
+  <h1>🔍 フレンド通知デバッグページ</h1>
+  
+  <div class="current-user-info">
+    <h2>セッション情報</h2>
+    <% if @current_user %>
+      <p><strong>ログイン中:</strong> <%= @current_user.email_address %> (ID: <%= @current_user.id %>)</p>
+    <% else %>
+      <p><strong>未ログイン</strong> - <a href="/session/new">ログイン</a></p>
+    <% end %>
+    <p><em>※ 以下のテスト機能はセッションに依存せず、任意のユーザーを指定できます</em></p>
+  </div>
+
+  <div class="test-notification-section">
+    <h2>📤 テスト通知送信</h2>
+    <% if flash[:notice] %>
+      <div class="notice" style="color: green; margin: 10px 0;">✅ <%= flash[:notice] %></div>
+    <% end %>
+    <% if flash[:alert] %>
+      <div class="alert" style="color: red; margin: 10px 0;">❌ <%= flash[:alert] %></div>
+    <% end %>
+    
+    <%= form_with url: kafka_send_test_notification_path, method: :post, local: true do |form| %>
+      <div class="form-group">
+        <%= form.label :user_id, "送信先ユーザー:" %>
+        <%= form.select :user_id, options_from_collection_for_select(@users, :id, ->(u) { "#{u.email_address} (ID: #{u.id})" }), { prompt: "ユーザーを選択" }, { class: "form-select" } %>
+      </div>
+      
+      <div class="form-group">
+        <%= form.label :notification_type, "通知タイプ:" %>
+        <%= form.select :notification_type, [
+          ['ユーザー通知 (user_notifications)', 'user_notification'],
+          ['フレンドアクティビティ (friend_activities)', 'friend_activity']
+        ], { prompt: "通知タイプを選択" }, { class: "form-select" } %>
+      </div>
+      
+      <div class="form-group">
+        <%= form.label :message, "メッセージ:" %>
+        <%= form.text_area :message, placeholder: "テスト通知のメッセージを入力", class: "form-input" %>
+      </div>
+      
+      <%= form.submit "テスト通知送信", class: "btn btn-primary" %>
+    <% end %>
+  </div>
+
+  <div class="friend-request-section">
+    <h2>👫 フレンド申請テスト</h2>
+    <%= form_with url: kafka_send_friend_request_path, method: :post, local: true, class: "friend-form" do |form| %>
+      <div class="form-group-inline">
+        <%= form.label :from_user_id, "送信者:" %>
+        <%= form.select :from_user_id, options_from_collection_for_select(@users, :id, ->(u) { u.email_address }), { prompt: "送信者を選択" }, { class: "form-select-small" } %>
+        
+        <span class="arrow">→</span>
+        
+        <%= form.label :to_user_id, "受信者:" %>
+        <%= form.select :to_user_id, options_from_collection_for_select(@users, :id, ->(u) { u.email_address }), { prompt: "受信者を選択" }, { class: "form-select-small" } %>
+        
+        <%= form.submit "フレンド申請送信", class: "btn btn-success btn-small" %>
+      </div>
+    <% end %>
+    
+    <h3>⏳ 待機中のフレンド申請</h3>
+    <% pending_friendships = @friendships.select { |f| f.status == 'pending' } %>
+    <% if pending_friendships.any? %>
+      <div class="pending-requests">
+        <% pending_friendships.each do |friendship| %>
+          <div class="pending-item">
+            <span><%= friendship.user.email_address %> → <%= friendship.friend.email_address %></span>
+            <%= form_with url: kafka_accept_friend_request_path, method: :post, local: true, class: "inline-form" do |form| %>
+              <%= form.hidden_field :friendship_id, value: friendship.id %>
+              <%= form.submit "承認", class: "btn btn-primary btn-mini" %>
+            <% end %>
+          </div>
+        <% end %>
+      </div>
+    <% else %>
+      <p class="no-data">待機中のフレンド申請はありません</p>
+    <% end %>
+  </div>
+
+  <div class="users-section">
+    <h2>👥 登録ユーザー一覧</h2>
+    <table class="users-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Email</th>
+          <th>フレンド数</th>
+          <th>待機中申請</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @users.each do |user| %>
+          <tr>
+            <td><%= user.id %></td>
+            <td><%= user.email_address %></td>
+            <td><%= user.friends.count %></td>
+            <td><%= user.incoming_friendships.pending.count %></td>
+            <td>
+              <a href="/kafka/websocket" target="_blank">WebSocket確認</a>
+            </td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="friendships-section">
+    <h2>👫 最近のフレンド関係</h2>
+    <div class="friendships-controls">
+      <%= form_with url: kafka_delete_all_friendships_path, method: :delete, local: true, class: "delete-all-form" do |form| %>
+        <%= form.submit "🗑️ 全フレンド関係削除", class: "btn btn-danger btn-small", 
+            confirm: "全てのフレンド関係を削除しますか？この操作は取り消せません。" %>
+      <% end %>
+      <span class="friendships-count">総数: <%= @friendships.count %>件</span>
+    </div>
+    <table class="friendships-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>申請者</th>
+          <th>相手</th>
+          <th>ステータス</th>
+          <th>作成日時</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% @friendships.each do |friendship| %>
+          <tr>
+            <td><%= friendship.id %></td>
+            <td><%= friendship.user.email_address %></td>
+            <td><%= friendship.friend.email_address %></td>
+            <td>
+              <span class="status-<%= friendship.status %>">
+                <%= case friendship.status
+                    when 'pending' then '⏳ 保留中'
+                    when 'accepted' then '✅ 承認済み'
+                    when 'rejected' then '❌ 拒否済み'
+                    else friendship.status
+                    end %>
+              </span>
+            </td>
+            <td><%= friendship.created_at.strftime("%Y-%m-%d %H:%M") %></td>
+          </tr>
+        <% end %>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="instructions-section">
+    <h2>📋 複数ユーザーテスト手順</h2>
+    <ol>
+      <li><strong>Karafka Consumer起動:</strong> <code>bundle exec karafka server</code></li>
+      <li><strong>複数タブでWebSocket接続:</strong>
+        <ul>
+          <li><strong>Alice用:</strong> <a href="/kafka/websocket" target="_blank">WebSocketページ</a> → alice@example.com でログイン</li>
+          <li><strong>Bob用:</strong> <a href="/kafka/websocket" target="_blank">新しいタブ</a> → bob@example.com でログイン</li>
+          <li><strong>Charlie用:</strong> <a href="/kafka/websocket" target="_blank">新しいタブ</a> → charlie@example.com でログイン</li>
+        </ul>
+      </li>
+      <li><strong>フレンド申請テスト:</strong> 上記フォームで Alice → Bob にフレンド申請</li>
+      <li><strong>リアルタイム確認:</strong> BobのWebSocketタブで通知を確認</li>
+      <li><strong>承認テスト:</strong> 待機中申請の「承認」ボタンクリック</li>
+      <li><strong>双方向確認:</strong> AliceのWebSocketタブで承認通知を確認</li>
+    </ol>
+    
+    <h3>🔍 確認ポイント</h3>
+    <ul>
+      <li><strong>Consumerログ:</strong> 
+        <pre>📨 USER NOTIFICATION RECEIVED
+   ユーザーID: 4
+   通知タイプ: friend_request
+   メッセージ: alice@example.comさんからフレンド申請が届きました</pre></li>
+      <li><strong>WebSocketログ:</strong> ブラウザコンソールで <code>📨 UserChannel received</code></li>
+      <li><strong>画面表示:</strong> 各ユーザーのWebSocketページに通知表示</li>
+    </ul>
+    
+    <h3>🎯 テストシナリオ例</h3>
+    <div class="scenario-example">
+      <p><strong>シナリオ:</strong> Alice → Bob へのフレンド申請と承認</p>
+      <ol>
+        <li>上記フォームで「Alice → Bob」フレンド申請送信</li>
+        <li>BobのWebSocketタブで「📬 新しいフレンド申請」通知確認</li>
+        <li>待機中申請で「承認」ボタンクリック</li>
+        <li>AliceのWebSocketタブで「✅ フレンド申請承認」通知確認</li>
+        <li>ユーザー一覧でフレンド数が増加していることを確認</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<style>
+.debug-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+  font-family: Arial, sans-serif;
+}
+
+.current-user-info, .test-notification-section, .friend-request-section, .users-section, .friendships-section, .instructions-section {
+  margin-bottom: 30px;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f9f9f9;
+}
+
+.form-group {
+  margin-bottom: 15px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+}
+
+.form-select, .form-input {
+  width: 100%;
+  max-width: 400px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.form-input {
+  min-height: 60px;
+  resize: vertical;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.btn-primary {
+  background-color: #007bff;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #0056b3;
+}
+
+.users-table, .friendships-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+}
+
+.users-table th, .users-table td,
+.friendships-table th, .friendships-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
+}
+
+.users-table th, .friendships-table th {
+  background-color: #f5f5f5;
+  font-weight: bold;
+}
+
+.status-pending { color: #856404; background: #fff3cd; padding: 2px 6px; border-radius: 3px; }
+.status-accepted { color: #155724; background: #d4edda; padding: 2px 6px; border-radius: 3px; }
+.status-rejected { color: #721c24; background: #f8d7da; padding: 2px 6px; border-radius: 3px; }
+
+.notice { padding: 10px; background: #d4edda; border: 1px solid #c3e6cb; border-radius: 4px; }
+.alert { padding: 10px; background: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; }
+
+.instructions-section h3 {
+  margin-top: 20px;
+  color: #333;
+}
+
+.instructions-section ul, .instructions-section ol {
+  margin-left: 20px;
+}
+
+.instructions-section code {
+  background: #f4f4f4;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: monospace;
+}
+
+/* フレンド申請セクション */
+.form-group-inline {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  flex-wrap: wrap;
+}
+
+.form-select-small {
+  width: auto;
+  min-width: 150px;
+  padding: 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.arrow {
+  font-size: 18px;
+  font-weight: bold;
+  color: #666;
+}
+
+.btn-small {
+  padding: 6px 12px;
+  font-size: 13px;
+}
+
+.btn-mini {
+  padding: 4px 8px;
+  font-size: 12px;
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: white;
+}
+
+.btn-success:hover {
+  background-color: #218838;
+}
+
+.pending-requests {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.pending-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.inline-form {
+  display: inline-block;
+}
+
+.no-data {
+  color: #666;
+  font-style: italic;
+  margin: 10px 0;
+}
+
+.scenario-example {
+  background: #e8f5e8;
+  padding: 15px;
+  border-radius: 6px;
+  margin-top: 15px;
+}
+
+.scenario-example p {
+  margin-bottom: 10px;
+  font-weight: bold;
+}
+
+.scenario-example ol {
+  margin-left: 0;
+}
+
+pre {
+  background: #f8f9fa;
+  padding: 10px;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 12px;
+}
+
+/* フレンド関係削除機能 */
+.friendships-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding: 10px;
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 4px;
+}
+
+.delete-all-form {
+  display: inline-block;
+}
+
+.btn-danger {
+  background-color: #dc3545;
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #c82333;
+}
+
+.friendships-count {
+  font-weight: bold;
+  color: #666;
+}
+</style>

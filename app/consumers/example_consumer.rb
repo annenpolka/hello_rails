@@ -12,14 +12,16 @@ class ExampleConsumer < ApplicationConsumer
         puts "📨 Payload class: #{message.payload.class}"
         puts "📨 Payload inspect: #{message.payload.inspect}"
 
-        # payloadがすでにHashの場合とJSON文字列の場合を判定
-        if message.payload.is_a?(String)
-          parsed_payload = JSON.parse(message.payload)
-          puts "✅ JSON parsed: #{parsed_payload.inspect}"
-        else
-          parsed_payload = message.payload
-          puts "✅ Already a Hash: #{parsed_payload.inspect}"
-        end
+        # payloadの型チェックとパース
+        parsed_payload = case message.payload
+                        when String
+                          JSON.parse(message.payload)
+                        when Hash
+                          message.payload
+                        else
+                          message.payload.to_h
+                        end
+        puts "✅ Payload processed (#{message.payload.class}): #{parsed_payload.inspect}"
 
         puts "📨 RECEIVED FROM KAFKA: #{parsed_payload.inspect}"
         puts "📨 Topic: #{message.topic}, Partition: #{message.partition}, Offset: #{message.offset}"

@@ -1,42 +1,55 @@
-version: '3.8'
+# Rails + Redpanda 開発環境
+# 使用方法: docker-compose up -d
 
 services:
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.4.0
-    hostname: zookeeper
-    container_name: zookeeper
+  # Redpanda - Kafka API互換ストリーミングプラットフォーム
+  redpanda:
+    image: redpandadata/redpanda:v24.3.1
+    hostname: redpanda
+    container_name: redpanda
     ports:
-      - "2181:2181"
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
+      - "9092:9092"     # Kafka API
+      - "9644:9644"     # Admin API
+    command:
+      - redpanda start
+      - --smp 1
+      - --memory 1G
+      - --overprovisioned
+      - --node-id 0
+      - --kafka-addr internal://0.0.0.0:29092,external://0.0.0.0:9092
+      - --advertise-kafka-addr internal://redpanda:29092,external://localhost:9092
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --default-log-level=info
+      - --set redpanda.auto_create_topics_enabled=true
+      - --set redpanda.group_initial_rebalance_delay=0
     volumes:
-      - zookeeper-data:/var/lib/zookeeper/data
-      - zookeeper-logs:/var/lib/zookeeper/log
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
 
-  kafka:
-    image: confluentinc/cp-kafka:7.4.0
-    hostname: kafka
-    container_name: kafka
+  # Redpanda Console - 管理WebUI
+  console:
+    image: redpandadata/console:v2.7.2
+    hostname: console
+    container_name: redpanda_console
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_BROKERS: redpanda:29092
+      REDPANDA_ADMINAPI_ENABLED: true
+      REDPANDA_ADMINAPI_URLS: http://redpanda:9644
     depends_on:
-      - zookeeper
-    ports:
-      - "9092:9092"
-      - "9101:9101"
-    environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_JMX_PORT: 9101
-      KAFKA_JMX_HOSTNAME: localhost
-    volumes:
-      - kafka-data:/var/lib/kafka/data
+      redpanda:
+        condition: service_healthy
+    restart: unless-stopped
 
+  # Redis - ActionCable用
   redis:
     image: redis:7-alpine
     hostname: redis
@@ -46,9 +59,42 @@ services:
     volumes:
       - redis-data:/data
     command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
+
+  # Redpanda初期化サービス（トピック作成など）
+  redpanda-init:
+    image: redpandadata/redpanda:v24.3.1
+    container_name: redpanda_init
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: |
+      bash -c "
+        echo '🚀 Redpanda初期化開始...'
+        
+        # トピック作成
+        rpk topic create example --brokers redpanda:29092 --partitions 3 --replicas 1 || echo 'トピック example は既に存在'
+        
+        # トピック一覧表示
+        echo '📋 作成されたトピック:'
+        rpk topic list --brokers redpanda:29092
+        
+        # Consumer グループ確認
+        echo '👥 Consumer グループ:'
+        rpk group list --brokers redpanda:29092 || echo 'Consumer グループなし'
+        
+        echo '✅ Redpanda初期化完了!'
+        echo '📊 管理コンソール: http://localhost:8080'
+        echo '🔌 Kafka API: localhost:9092'
+        echo '🔧 Admin API: http://localhost:9644'
+      "
+    restart: "no"
 
 volumes:
-  zookeeper-data:
-  zookeeper-logs:
-  kafka-data:
+  redpanda-data:
   redis-data:

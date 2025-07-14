@@ -1,15 +1,73 @@
 <div class="container">
-  <h1>🔌 Kafka WebSocket リアルタイム通信</h1>
+  <h1>🔌 フレンド通知システム - 複数WebSocket接続</h1>
+  
+  <div class="user-info">
+    <h3>ユーザー情報</h3>
+    <div id="current-user">
+      <% if current_user %>
+        ログイン中: <%= current_user.email_address %> (ID: <%= current_user.id %>)
+      <% else %>
+        未ログイン
+      <% end %>
+    </div>
+    
+    <div class="user-switcher">
+      <h4>🔄 複数ユーザーテスト用切り替え</h4>
+      <p class="switcher-note">※ セッション認証を無視して任意のユーザーIDでWebSocket接続できます</p>
+      <div class="switcher-controls">
+        <select id="test-user-select">
+          <option value="">ユーザーを選択...</option>
+          <% User.all.each do |user| %>
+            <option value="<%= user.id %>" data-email="<%= user.email_address %>">
+              <%= user.email_address %> (ID: <%= user.id %>)
+            </option>
+          <% end %>
+        </select>
+        <button id="connect-as-user" disabled>このユーザーで接続</button>
+        <button id="disconnect-websockets">全て切断</button>
+      </div>
+      <div id="active-connection-info" class="connection-info"></div>
+    </div>
+  </div>
   
   <div class="connection-status">
     <h3>接続状況</h3>
-    <div id="connection-status" class="status disconnected">
-      🔴 未接続
+    <div class="connections">
+      <div class="connection-item">
+        <strong>一般メッセージ:</strong>
+        <span id="kafka-connection-status" class="status disconnected">🔴 未接続</span>
+      </div>
+      <div class="connection-item">
+        <strong>個人通知:</strong>
+        <span id="user-connection-status" class="status disconnected">🔴 未接続</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="friend-actions">
+    <h3>フレンド機能</h3>
+    <div class="friend-section">
+      <div class="input-group">
+        <input type="email" id="friend-email" placeholder="フレンドのメールアドレス" />
+        <button id="send-friend-request" disabled>フレンド申請送信</button>
+      </div>
+      
+      <div class="input-group">
+        <input type="number" id="friend-id" placeholder="フレンドID" />
+        <select id="activity-type">
+          <option value="game_invite">ゲーム招待</option>
+          <option value="chat_message">チャットメッセージ</option>
+          <option value="status_update">ステータス更新</option>
+          <option value="achievement">アチーブメント</option>
+        </select>
+        <input type="text" id="activity-message" placeholder="通知メッセージ" />
+        <button id="send-activity" disabled>フレンドに通知</button>
+      </div>
     </div>
   </div>
 
   <div class="message-sender">
-    <h3>メッセージ送信</h3>
+    <h3>一般メッセージ送信</h3>
     <div class="input-group">
       <select id="message-type">
         <option value="user_message">ユーザーメッセージ</option>
@@ -42,12 +100,30 @@
   font-family: Arial, sans-serif;
 }
 
-.connection-status, .message-sender, .message-display {
+.user-info, .connection-status, .friend-actions, .message-sender, .message-display {
   margin-bottom: 30px;
   padding: 20px;
   border: 1px solid #ddd;
   border-radius: 8px;
   background: #f9f9f9;
+}
+
+.connections {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.connection-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.friend-section {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
 }
 
 .status {
@@ -159,14 +235,90 @@
   font-size: 0.8em;
   color: #999;
 }
+
+/* ユーザー切り替え機能 */
+.user-switcher {
+  margin-top: 20px;
+  padding: 15px;
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 6px;
+}
+
+.user-switcher h4 {
+  margin: 0 0 10px 0;
+  color: #1565c0;
+}
+
+.switcher-note {
+  font-size: 0.9em;
+  color: #666;
+  margin: 0 0 15px 0;
+  font-style: italic;
+}
+
+.switcher-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.switcher-controls select {
+  flex: 1;
+  min-width: 200px;
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+}
+
+.switcher-controls button {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+#connect-as-user {
+  background: #4caf50;
+  color: white;
+}
+
+#connect-as-user:disabled {
+  background: #cccccc;
+  cursor: not-allowed;
+}
+
+#disconnect-websockets {
+  background: #f44336;
+  color: white;
+}
+
+.connection-info {
+  margin-top: 15px;
+  padding: 10px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 0.9em;
+  min-height: 20px;
+}
+
+.connection-info.active {
+  background: #d4edda;
+  border-color: #c3e6cb;
+  color: #155724;
+}
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', function() {
-  console.log('🚀 WebSocket page loaded');
+  console.log('🚀 フレンド通知システム loaded');
   
-  // 要素を取得
-  const statusElement = document.getElementById('connection-status');
+  // DOM要素を取得
+  const kafkaStatusElement = document.getElementById('kafka-connection-status');
+  const userStatusElement = document.getElementById('user-connection-status');
   const messageInput = document.getElementById('message-input');
   const messageType = document.getElementById('message-type');
   const sendButton = document.getElementById('send-button');
@@ -174,10 +326,31 @@ document.addEventListener('DOMContentLoaded', function() {
   const clearButton = document.getElementById('clear-messages');
   const autoScrollCheckbox = document.getElementById('auto-scroll');
   
+  // フレンド機能要素
+  const friendEmail = document.getElementById('friend-email');
+  const sendFriendRequestButton = document.getElementById('send-friend-request');
+  const friendId = document.getElementById('friend-id');
+  const activityType = document.getElementById('activity-type');
+  const activityMessage = document.getElementById('activity-message');
+  const sendActivityButton = document.getElementById('send-activity');
+  
+  // ユーザー切り替え要素
+  const testUserSelect = document.getElementById('test-user-select');
+  const connectAsUserButton = document.getElementById('connect-as-user');
+  const disconnectWebSocketsButton = document.getElementById('disconnect-websockets');
+  const activeConnectionInfo = document.getElementById('active-connection-info');
+  
+  // 接続管理
   let cable = null;
-  let subscription = null;
-  let connected = false;
+  let kafkaSubscription = null;
+  let userSubscription = null;
+  let kafkaConnected = false;
+  let userConnected = false;
   let messageCount = 0;
+  
+  // ユーザー情報
+  const sessionUserId = <%= current_user&.id || 'null' %>;
+  let activeUserId = sessionUserId; // テスト用に切り替え可能
   
   // ActionCableの利用可能性をチェック
   function checkActionCable() {
@@ -192,16 +365,51 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   
   // 接続状況を更新
-  function updateConnectionStatus(isConnected) {
-    connected = isConnected;
-    sendButton.disabled = !connected;
+  function updateKafkaConnectionStatus(isConnected) {
+    kafkaConnected = isConnected;
+    updateButtonStates();
     
-    if (connected) {
-      statusElement.textContent = '🟢 接続中';
-      statusElement.className = 'status connected';
+    if (isConnected) {
+      kafkaStatusElement.textContent = '🟢 接続中';
+      kafkaStatusElement.className = 'status connected';
     } else {
-      statusElement.textContent = '🔴 未接続';
-      statusElement.className = 'status disconnected';
+      kafkaStatusElement.textContent = '🔴 未接続';
+      kafkaStatusElement.className = 'status disconnected';
+    }
+  }
+  
+  function updateUserConnectionStatus(isConnected) {
+    userConnected = isConnected;
+    updateButtonStates();
+    
+    if (isConnected) {
+      userStatusElement.textContent = '🟢 接続中';
+      userStatusElement.className = 'status connected';
+    } else {
+      userStatusElement.textContent = '🔴 未接続';
+      userStatusElement.className = 'status disconnected';
+    }
+  }
+  
+  function updateButtonStates() {
+    sendButton.disabled = !kafkaConnected;
+    sendFriendRequestButton.disabled = !userConnected || !activeUserId;
+    sendActivityButton.disabled = !userConnected || !activeUserId;
+    connectAsUserButton.disabled = !testUserSelect.value;
+    
+    // 接続情報を更新
+    updateConnectionInfo();
+  }
+  
+  function updateConnectionInfo() {
+    if (activeUserId) {
+      const selectedOption = testUserSelect.querySelector(`option[value="${activeUserId}"]`);
+      const email = selectedOption ? selectedOption.dataset.email : 'Unknown';
+      activeConnectionInfo.textContent = `🔗 接続中ユーザー: ${email} (ID: ${activeUserId})`;
+      activeConnectionInfo.className = 'connection-info active';
+    } else {
+      activeConnectionInfo.textContent = '未接続';
+      activeConnectionInfo.className = 'connection-info';
     }
   }
   
@@ -216,39 +424,63 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('🔌 Connecting to WebSocket...');
     cable = window.ActionCable.createConsumer();
     
-    subscription = cable.subscriptions.create('KafkaChannel', {
+    // 一般メッセージ用のKafkaChannel接続
+    kafkaSubscription = cable.subscriptions.create('KafkaChannel', {
       connected: function() {
         console.log('✅ WebSocket connected to KafkaChannel');
-        updateConnectionStatus(true);
+        updateKafkaConnectionStatus(true);
       },
       
       disconnected: function() {
         console.log('❌ WebSocket disconnected from KafkaChannel');
-        updateConnectionStatus(false);
+        updateKafkaConnectionStatus(false);
       },
       
       received: function(data) {
-        console.log('📨 Raw received data:', data);
-        console.log('📨 Data type:', typeof data);
-        console.log('📨 Data action:', data.action);
-        
-        // データがJSON文字列の場合はパース
-        if (typeof data === 'string') {
-          try {
-            data = JSON.parse(data);
-            console.log('📨 Parsed data:', data);
-          } catch (e) {
-            console.error('❌ Failed to parse JSON:', e);
-            return;
-          }
-        }
-        
-        handleReceivedMessage(data);
+        console.log('📨 KafkaChannel received:', data);
+        handleKafkaMessage(data);
       }
     });
+    
+    // ユーザー個人通知用のUserChannel接続
+    if (activeUserId) {
+      userSubscription = cable.subscriptions.create({
+        channel: 'UserChannel',
+        user_id: activeUserId
+      }, {
+        connected: function() {
+          console.log('✅ WebSocket connected to UserChannel');
+          updateUserConnectionStatus(true);
+        },
+        
+        disconnected: function() {
+          console.log('❌ WebSocket disconnected from UserChannel');
+          updateUserConnectionStatus(false);
+        },
+        
+        rejected: function() {
+          console.log('❌ UserChannel subscription rejected (authentication failed)');
+          updateUserConnectionStatus(false);
+          displayMessage({
+            type: 'error',
+            header: '❌ 個人通知接続エラー',
+            content: 'ログインが必要です。ログイン後にページを再読み込みしてください。',
+            timestamp: new Date().toLocaleString()
+          });
+        },
+        
+        received: function(data) {
+          console.log('📨 UserChannel received:', data);
+          handleUserNotification(data);
+        }
+      });
+    } else {
+      console.log('⚠️ No active user ID, skipping UserChannel connection');
+      updateUserConnectionStatus(false);
+    }
   }
   
-  // メッセージ送信
+  // 一般メッセージ送信
   function sendMessage() {
     const content = messageInput.value.trim();
     const type = messageType.value;
@@ -258,13 +490,13 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
     
-    if (!connected) {
-      alert('WebSocketが接続されていません');
+    if (!kafkaConnected) {
+      alert('KafkaChannelが接続されていません');
       return;
     }
     
     console.log('📤 Sending message:', { content, type });
-    subscription.perform('send_message', {
+    kafkaSubscription.perform('send_message', {
       content: content,
       type: type
     });
@@ -272,13 +504,72 @@ document.addEventListener('DOMContentLoaded', function() {
     messageInput.value = '';
   }
   
-  // 受信メッセージ処理
-  function handleReceivedMessage(data) {
+  // フレンド申請送信
+  function sendFriendRequest() {
+    const email = friendEmail.value.trim();
+    
+    if (!email) {
+      alert('フレンドのメールアドレスを入力してください');
+      return;
+    }
+    
+    if (!userConnected) {
+      alert('UserChannelが接続されていません');
+      return;
+    }
+    
+    console.log('📤 Sending friend request to:', email);
+    userSubscription.perform('send_friend_request', {
+      friend_email: email
+    });
+    
+    friendEmail.value = '';
+  }
+  
+  // アクティビティ通知送信
+  function sendActivityNotification() {
+    const fId = friendId.value.trim();
+    const aType = activityType.value;
+    const message = activityMessage.value.trim();
+    
+    if (!fId || !message) {
+      alert('フレンドIDとメッセージを入力してください');
+      return;
+    }
+    
+    if (!userConnected) {
+      alert('UserChannelが接続されていません');
+      return;
+    }
+    
+    console.log('📤 Sending activity notification:', { fId, aType, message });
+    userSubscription.perform('send_activity_notification', {
+      friend_id: parseInt(fId),
+      activity_type: aType,
+      message: message
+    });
+    
+    friendId.value = '';
+    activityMessage.value = '';
+  }
+  
+  // Kafkaメッセージ処理
+  function handleKafkaMessage(data) {
+    // データがJSON文字列の場合はパース
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch (e) {
+        console.error('❌ Failed to parse JSON:', e);
+        return;
+      }
+    }
+    
     switch (data.action) {
       case 'message_sent':
         displayMessage({
           type: 'sent',
-          header: `📤 送信${data.status === 'success' ? '成功' : '失敗'}`,
+          header: `📤 一般メッセージ送信${data.status === 'success' ? '成功' : '失敗'}`,
           content: data.status === 'success' 
             ? JSON.stringify(data.message, null, 2)
             : `エラー: ${data.error}`,
@@ -297,8 +588,75 @@ document.addEventListener('DOMContentLoaded', function() {
         break;
         
       default:
-        console.log('Unknown action:', data.action);
+        console.log('Unknown Kafka action:', data.action);
     }
+  }
+  
+  // ユーザー通知処理
+  function handleUserNotification(data) {
+    switch (data.action) {
+      case 'friend_request_sent':
+      case 'friend_request_accepted':
+      case 'friend_request_rejected':
+      case 'activity_notification_sent':
+        displayMessage({
+          type: data.status === 'success' ? 'sent' : 'error',
+          header: `📱 フレンド機能: ${getActionLabel(data.action)}`,
+          content: data.message,
+          timestamp: new Date().toLocaleString()
+        });
+        break;
+        
+      case 'friend_notification':
+        const payload = data.payload;
+        let header = '';
+        let msgType = 'received';
+        
+        switch (payload.type) {
+          case 'friend_request':
+            header = '📬 新しいフレンド申請';
+            break;
+          case 'friend_accepted':
+            header = '✅ フレンド申請承認';
+            break;
+          case 'friend_activity':
+            header = `🎮 フレンドアクティビティ: ${payload.activity_type}`;
+            break;
+          default:
+            header = '📨 フレンド通知';
+        }
+        
+        displayMessage({
+          type: msgType,
+          header: header,
+          content: payload.message,
+          meta: payload.from_user ? `送信者: ${payload.from_user.email}` : '',
+          timestamp: new Date(payload.timestamp).toLocaleString()
+        });
+        break;
+        
+      case 'error':
+        displayMessage({
+          type: 'error',
+          header: '❌ エラー',
+          content: data.message,
+          timestamp: new Date().toLocaleString()
+        });
+        break;
+        
+      default:
+        console.log('Unknown user notification action:', data.action);
+    }
+  }
+  
+  function getActionLabel(action) {
+    const labels = {
+      'friend_request_sent': 'フレンド申請送信',
+      'friend_request_accepted': 'フレンド申請承認',
+      'friend_request_rejected': 'フレンド申請拒否',
+      'activity_notification_sent': 'アクティビティ通知送信'
+    };
+    return labels[action] || action;
   }
   
   // メッセージ表示
@@ -332,11 +690,84 @@ document.addEventListener('DOMContentLoaded', function() {
   messageInput.addEventListener('keypress', function(e) {
     if (e.key === 'Enter') sendMessage();
   });
+  
+  sendFriendRequestButton.addEventListener('click', sendFriendRequest);
+  friendEmail.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') sendFriendRequest();
+  });
+  
+  sendActivityButton.addEventListener('click', sendActivityNotification);
+  activityMessage.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') sendActivityNotification();
+  });
+  
   clearButton.addEventListener('click', clearMessages);
   
+  // ユーザー切り替え機能のイベントリスナー
+  testUserSelect.addEventListener('change', function() {
+    const selectedUserId = this.value;
+    connectAsUserButton.disabled = !selectedUserId;
+  });
+  
+  connectAsUserButton.addEventListener('click', function() {
+    const selectedUserId = testUserSelect.value;
+    if (selectedUserId) {
+      connectAsUser(selectedUserId);
+    }
+  });
+  
+  disconnectWebSocketsButton.addEventListener('click', function() {
+    disconnectWebSockets();
+  });
+  
+  // WebSocket切断機能
+  function disconnectWebSockets() {
+    console.log('🔌 WebSocketを切断中...');
+    
+    if (cable) {
+      cable.disconnect();
+      cable = null;
+      kafkaSubscription = null;
+      userSubscription = null;
+    }
+    
+    updateKafkaConnectionStatus(false);
+    updateUserConnectionStatus(false);
+    activeUserId = null;
+    updateConnectionInfo();
+    updateButtonStates();
+    
+    console.log('✅ WebSocket切断完了');
+  }
+  
+  // 指定ユーザーでWebSocket接続
+  function connectAsUser(userId) {
+    console.log(`🔌 ユーザーID ${userId} でWebSocket接続中...`);
+    
+    // 既存の接続を切断
+    disconnectWebSockets();
+    
+    // アクティブユーザーIDを更新
+    activeUserId = parseInt(userId);
+    
+    // 新しい接続を開始
+    setTimeout(function() {
+      connect();
+    }, 500); // 500ms待ってから再接続
+  }
+  
   // 初期化
-  setTimeout(function() {
-    connect();
-  }, 1000); // 1秒待ってから接続
+  if (!sessionUserId) {
+    console.log('⚠️ ユーザーがログインしていません。セッション認証は利用できませんが、テスト用切り替え機能で任意のユーザーとして接続できます。');
+  }
+  
+  // 初期接続（セッションユーザーがいる場合のみ）
+  if (sessionUserId) {
+    setTimeout(function() {
+      connect();
+    }, 1000); // 1秒待ってから接続
+  } else {
+    console.log('⚠️ セッションユーザーなし。テスト用切り替え機能を使用してください。');
+  }
 });
 </script>

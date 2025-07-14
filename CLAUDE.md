@@ -58,18 +58,26 @@ HelloRailsアプリケーション - Rails 8.0.2を使用したRailsガイド学
 4. Hotwireの活用
 5. Rails 8の新機能探索
 
-## Kafka/Karafka 統合
-- **Karafka Gem**: Apache Kafka メッセージング統合
-- **設定ファイル**: `karafka.rb`
+## Kafka/Karafka 統合 (Redpanda対応)
+- **Karafka Gem**: Apache Kafka API互換のRedpandaメッセージング統合
+- **設定ファイル**: `karafka.rb` (Redpanda最適化済み)
 - **Consumer**: `app/consumers/` ディレクトリ
-- **Docker環境**: `docker-compose.yml` でKafka/Zookeeper管理
-- **テストガイド**: `KARAFKA_TESTING_GUIDE.md` 参照
+- **Docker環境**: `docker-compose.yml` でRedpanda管理（ZooKeeper不要）
+- **管理UI**: Redpanda Console (http://localhost:8080)
 
-### Kafka関連コマンド
-- Kafka起動: `docker-compose up -d`
+### Redpanda関連コマンド
+- 環境起動: `docker-compose up -d`
+- 環境停止: `docker-compose down`
+- ログ確認: `docker-compose logs`
 - Consumer起動: `bundle exec karafka server`
-- 統合テスト: `ruby final_test.rb`
-- Consumer テスト: `ruby consumer_test.rb`
+- 管理コンソール: `http://localhost:8080`
+
+### Redpanda vs Kafka
+- **性能**: 10倍低レイテンシ、3倍少ないリソース
+- **運用**: ZooKeeper不要、JVM不要
+- **互換性**: Kafka API 100%互換
+- **開発**: 単一ノードで完全機能
+- **監視**: 統合WebUI付き
 
 ## 注意事項
 - 日本語をデフォルト言語として使用
