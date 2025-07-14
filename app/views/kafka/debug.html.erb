@@ -23,7 +23,7 @@
     <%= form_with url: kafka_send_test_notification_path, method: :post, local: true do |form| %>
       <div class="form-group">
         <%= form.label :user_id, "送信先ユーザー:" %>
-        <%= form.select :user_id, options_from_collection_for_select(@users, :id, ->(u) { "#{u.email_address} (ID: #{u.id})" }), { prompt: "ユーザーを選択" }, { class: "form-select" } %>
+        <%= form.select :user_id, options_from_collection_for_select(@users, :id, ->(u) { "#{u.email_address} (ID: #{u.id})" }, params[:user_id]), { prompt: "ユーザーを選択" }, { class: "form-select" } %>
       </div>
       
       <div class="form-group">
@@ -31,12 +31,24 @@
         <%= form.select :notification_type, [
           ['ユーザー通知 (user_notifications)', 'user_notification'],
           ['フレンドアクティビティ (friend_activities)', 'friend_activity']
-        ], { prompt: "通知タイプを選択" }, { class: "form-select" } %>
+        ], { prompt: "通知タイプを選択", selected: params[:notification_type] }, { class: "form-select" } %>
       </div>
       
       <div class="form-group">
         <%= form.label :message, "メッセージ:" %>
-        <%= form.text_area :message, placeholder: "テスト通知のメッセージを入力", class: "form-input" %>
+        <%= form.text_area :message, placeholder: "テスト通知のメッセージを入力", value: params[:message], class: "form-input" %>
+      </div>
+      
+      <div class="form-group">
+        <%= form.label :repeat_count, "繰り返し回数:" %>
+        <%= form.number_field :repeat_count, value: params[:repeat_count] || 1, min: 1, class: "form-select repeat-input" %>
+        <small class="form-help">※ 負荷テスト用（注意：大きな値は system に負荷をかけます）</small>
+      </div>
+      
+      <div class="form-group">
+        <%= form.label :delay_ms, "送信間隔 (ms):" %>
+        <%= form.number_field :delay_ms, value: params[:delay_ms] || 100, min: 0, class: "form-select repeat-input" %>
+        <small class="form-help">※ 0=間隔なし、1000=1秒間隔</small>
       </div>
       
       <%= form.submit "テスト通知送信", class: "btn btn-primary" %>
@@ -178,7 +190,7 @@
     
     <h3>🎯 テストシナリオ例</h3>
     <div class="scenario-example">
-      <p><strong>シナリオ:</strong> Alice → Bob へのフレンド申請と承認</p>
+      <p><strong>シナリオ1:</strong> Alice → Bob へのフレンド申請と承認</p>
       <ol>
         <li>上記フォームで「Alice → Bob」フレンド申請送信</li>
         <li>BobのWebSocketタブで「📬 新しいフレンド申請」通知確認</li>
@@ -186,6 +198,21 @@
         <li>AliceのWebSocketタブで「✅ フレンド申請承認」通知確認</li>
         <li>ユーザー一覧でフレンド数が増加していることを確認</li>
       </ol>
+    </div>
+    
+    <div class="scenario-example">
+      <p><strong>シナリオ2:</strong> 負荷テスト - 大量通知送信</p>
+      <ol>
+        <li>送信先ユーザー: Bob を選択</li>
+        <li>通知タイプ: ユーザー通知 を選択</li>
+        <li>メッセージ: "負荷テスト" と入力</li>
+        <li>繰り返し回数: 1000 と入力</li>
+        <li>送信間隔: 10ms と入力</li>
+        <li>「テスト通知送信」ボタンクリック</li>
+        <li>BobのWebSocketタブで連続通知の受信を確認</li>
+        <li>Consumerログで処理状況を確認</li>
+      </ol>
+      <p><small>※ 各メッセージには (#1/1000) のような番号が自動追加されます</small></p>
     </div>
   </div>
 </div>
@@ -407,5 +434,19 @@ pre {
 .friendships-count {
   font-weight: bold;
   color: #666;
+}
+
+/* 繰り返し送信機能 */
+.repeat-input {
+  width: 120px !important;
+  max-width: 120px !important;
+}
+
+.form-help {
+  display: block;
+  font-size: 0.85em;
+  color: #666;
+  margin-top: 5px;
+  font-style: italic;
 }
 </style>

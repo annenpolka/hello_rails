@@ -11,10 +11,15 @@ class KarafkaApp < Karafka::App
       'retry.backoff.ms': 100,
       'delivery.timeout.ms': 120_000,
       'request.timeout.ms': 30_000,
-      # Redpanda specific optimizations
+      # Redpanda specific optimizations for async performance
       'batch.size': 16_384,
       'linger.ms': 5,
-      'compression.type': 'snappy'
+      'compression.type': 'snappy',
+      # Async producer optimizations
+      'queue.buffering.max.messages': 100_000,
+      'queue.buffering.max.kbytes': 1_048_576,
+      'batch.num.messages': 10_000,
+      'max.in.flight.requests.per.connection': 5
     }
     config.client_id = 'hello_rails_app_redpanda'
 

@@ -53,7 +53,7 @@
       </div>
       
       <div class="input-group">
-        <input type="number" id="friend-id" placeholder="フレンドID" />
+        <input type="number" id="friend-id" placeholder="ユーザーID (1-5)" />
         <select id="activity-type">
           <option value="game_invite">ゲーム招待</option>
           <option value="chat_message">チャットメッセージ</option>
@@ -61,7 +61,10 @@
           <option value="achievement">アチーブメント</option>
         </select>
         <input type="text" id="activity-message" placeholder="通知メッセージ" />
-        <button id="send-activity" disabled>フレンドに通知</button>
+        <button id="send-activity" disabled>ユーザーに通知</button>
+      </div>
+      <div class="test-note">
+        <small>※ テスト環境: フレンド関係なしで任意のユーザーに通知を送信可能</small>
       </div>
     </div>
   </div>
@@ -220,6 +223,12 @@
   background: #f8d7da;
 }
 
+.message.sending {
+  border-left-color: #ffc107;
+  background: #fff3cd;
+  opacity: 0.8;
+}
+
 .message-header {
   font-weight: bold;
   margin-bottom: 5px;
@@ -309,6 +318,16 @@
   background: #d4edda;
   border-color: #c3e6cb;
   color: #155724;
+}
+
+.test-note {
+  margin-top: 10px;
+  padding: 8px;
+  background: #fff3cd;
+  border: 1px solid #ffeaa7;
+  border-radius: 4px;
+  font-style: italic;
+  color: #856404;
 }
 </style>
 
@@ -533,7 +552,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const message = activityMessage.value.trim();
     
     if (!fId || !message) {
-      alert('フレンドIDとメッセージを入力してください');
+      alert('ユーザーIDとメッセージを入力してください');
       return;
     }
     
@@ -542,7 +561,7 @@ document.addEventListener('DOMContentLoaded', function() {
       return;
     }
     
-    console.log('📤 Sending activity notification:', { fId, aType, message });
+    console.log('📤 Sending activity notification:', { userId: fId, aType, message });
     userSubscription.perform('send_activity_notification', {
       friend_id: parseInt(fId),
       activity_type: aType,
@@ -567,11 +586,33 @@ document.addEventListener('DOMContentLoaded', function() {
     
     switch (data.action) {
       case 'message_sent':
+        let statusText = '';
+        let messageType = 'sent';
+        
+        switch (data.status) {
+          case 'sending':
+            statusText = '送信中';
+            messageType = 'sending';
+            break;
+          case 'success':
+            statusText = '送信成功';
+            messageType = 'sent';
+            break;
+          case 'failed':
+            statusText = '送信失敗';
+            messageType = 'error';
+            break;
+          default:
+            statusText = data.status;
+        }
+        
         displayMessage({
-          type: 'sent',
-          header: `📤 一般メッセージ送信${data.status === 'success' ? '成功' : '失敗'}`,
+          type: messageType,
+          header: `📤 一般メッセージ${statusText}`,
           content: data.status === 'success' 
-            ? JSON.stringify(data.message, null, 2)
+            ? JSON.stringify(data.message, null, 2) + (data.kafka_info ? `\nKafka Info: ${JSON.stringify(data.kafka_info, null, 2)}` : '')
+            : data.status === 'sending'
+            ? `${data.note || '送信中...'}\n${JSON.stringify(data.message, null, 2)}`
             : `エラー: ${data.error}`,
           timestamp: new Date().toLocaleString()
         });
