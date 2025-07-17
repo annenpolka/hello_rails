@@ -24,7 +24,7 @@ gem "bcrypt", "~> 3.1.7"
 gem "karafka", ">= 2.5.0"
 
 # Redis for ActionCable
-gem "redis", "~> 5.0"
+gem "redis", "~> 5.4"
 
 # Windows does not include zoneinfo files, so bundle the tzinfo-data gem
 gem "tzinfo-data", platforms: %i[ windows jruby ]
